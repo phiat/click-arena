@@ -50,10 +50,9 @@ pub fn click(ctx: &ReducerContext, session_id: String) {
 
 #[reducer]
 pub fn spawn_bonus(ctx: &ReducerContext, position: String, points: u64) {
-    // Delete any existing bonus rows
-    let existing: Vec<_> = ctx.db.bonus().iter().collect();
-    for b in existing {
-        ctx.db.bonus().id().delete(b.id);
+    // Cap at 6 bonuses (one per slot)
+    if ctx.db.bonus().iter().count() >= 6 {
+        return;
     }
     ctx.db.bonus().insert(Bonus {
         id: 0, // auto_inc

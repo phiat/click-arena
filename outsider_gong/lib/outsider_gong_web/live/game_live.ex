@@ -19,7 +19,6 @@ defmodule OutsiderGongWeb.GameLive do
     end
 
     session_id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
-    bonus = fetch_bonus()
 
     socket =
       socket
@@ -28,10 +27,8 @@ defmodule OutsiderGongWeb.GameLive do
       |> assign(:joined, false)
       |> assign(:players, fetch_players())
       |> assign(:tick, 0)
-      |> assign(:bonus_visible, bonus != nil)
-      |> assign(:bonus_position, if(bonus, do: bonus["position"], else: "top-left"))
-      |> assign(:bonus_id, if(bonus, do: bonus["id"], else: nil))
-      |> assign(:bonus_popping, false)
+      |> assign(:bonuses, fetch_bonuses())
+      |> assign(:popping, %{})
       |> assign(:bonus_points, @bonus_points)
       |> assign(:click_count, 0)
 
@@ -65,27 +62,33 @@ defmodule OutsiderGongWeb.GameLive do
     click_count = socket.assigns.click_count + 1
     socket = assign(socket, click_count: click_count)
 
-    # Check if we should spawn bonus on score milestones (every 50 clicks, 50% chance)
-    if rem(click_count, 50) == 0 and :rand.uniform() < 0.5 and not socket.assigns.bonus_visible do
-      call_spawn_bonus()
+    # 10% chance every 20 clicks to spawn a bonus if slots available
+    if rem(click_count, 20) == 0 and :rand.uniform() < 0.1 and length(socket.assigns.bonuses) < 6 do
+      call_spawn_bonus(socket.assigns.bonuses)
     end
 
     schedule_refresh()
     {:noreply, socket}
   end
 
-  def handle_event("bonus_click", _params, socket) do
-    if socket.assigns.bonus_visible and not socket.assigns.bonus_popping do
+  def handle_event("bonus_click", %{"id" => bonus_id}, socket) do
+    bonus_id = if is_binary(bonus_id), do: String.to_integer(bonus_id), else: bonus_id
+
+    if not Map.has_key?(socket.assigns.popping, bonus_id) do
+      # Snapshot the bonus data before it leaves the DB
+      bonus = Enum.find(socket.assigns.bonuses, &(&1.id == bonus_id))
+
       Spacetimedbex.Client.call_reducer(
         Spacetimedbex.Phoenix,
         "claim_bonus",
-        %{"session_id" => socket.assigns.session_id, "bonus_id" => socket.assigns.bonus_id}
+        %{"session_id" => socket.assigns.session_id, "bonus_id" => bonus_id}
       )
 
-      # Start pop animation, then hide after animation completes
-      Process.send_after(self(), :bonus_animation_done, 600)
+      # Start pop animation, then clean up after it completes
+      Process.send_after(self(), {:bonus_animation_done, bonus_id}, 800)
       schedule_refresh()
-      {:noreply, assign(socket, bonus_popping: true)}
+      popping = if bonus, do: Map.put(socket.assigns.popping, bonus_id, bonus), else: socket.assigns.popping
+      {:noreply, assign(socket, popping: popping)}
     else
       {:noreply, socket}
     end
@@ -115,18 +118,18 @@ defmodule OutsiderGongWeb.GameLive do
   def handle_info(:maybe_spawn_bonus, socket) do
     schedule_bonus_check()
 
-    if socket.assigns.joined and not socket.assigns.bonus_visible do
+    if socket.assigns.joined and length(socket.assigns.bonuses) < 6 do
       # ~50% chance each check (checks every 30-90s)
       if :rand.uniform() < 0.5 do
-        call_spawn_bonus()
+        call_spawn_bonus(socket.assigns.bonuses)
       end
     end
 
     {:noreply, socket}
   end
 
-  def handle_info(:bonus_animation_done, socket) do
-    {:noreply, assign(socket, bonus_popping: false)}
+  def handle_info({:bonus_animation_done, bonus_id}, socket) do
+    {:noreply, assign(socket, popping: Map.delete(socket.assigns.popping, bonus_id))}
   end
 
   def handle_info({:spacetimedb, _action, "player", _row}, socket) do
@@ -134,27 +137,21 @@ defmodule OutsiderGongWeb.GameLive do
   end
 
   def handle_info({:spacetimedb, _action, "bonus", _row}, socket) do
-    bonus = fetch_bonus()
+    new_bonuses = fetch_bonuses()
+    new_ids = MapSet.new(new_bonuses, & &1.id)
 
-    socket =
-      if bonus do
-        assign(socket,
-          bonus_visible: true,
-          bonus_position: bonus["position"],
-          bonus_id: bonus["id"],
-          bonus_popping: false
-        )
-      else
-        # Bonus was claimed/deleted — only hide if not mid-animation
-        if socket.assigns.bonus_popping do
-          # Let animation finish, it will clear via :bonus_animation_done
-          socket
-        else
-          assign(socket, bonus_visible: false, bonus_id: nil)
-        end
+    # Bonuses that disappeared (claimed by someone) — animate them out
+    vanished =
+      for bonus <- socket.assigns.bonuses,
+          not MapSet.member?(new_ids, bonus.id),
+          not Map.has_key?(socket.assigns.popping, bonus.id),
+          into: %{} do
+        Process.send_after(self(), {:bonus_animation_done, bonus.id}, 800)
+        {bonus.id, bonus}
       end
 
-    {:noreply, socket}
+    popping = Map.merge(socket.assigns.popping, vanished)
+    {:noreply, assign(socket, bonuses: new_bonuses, popping: popping)}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -171,21 +168,28 @@ defmodule OutsiderGongWeb.GameLive do
     Process.send_after(self(), :maybe_spawn_bonus, delay)
   end
 
-  defp call_spawn_bonus do
-    position = Enum.random(@bonus_positions)
+  defp call_spawn_bonus(current_bonuses) do
+    taken = MapSet.new(current_bonuses, & &1.position)
+    free = Enum.reject(@bonus_positions, &MapSet.member?(taken, &1))
 
-    Spacetimedbex.Client.call_reducer(
-      Spacetimedbex.Phoenix,
-      "spawn_bonus",
-      %{"position" => position, "points" => @bonus_points}
-    )
+    case free do
+      [] -> :noop
+      positions ->
+        position = Enum.random(positions)
+
+        Spacetimedbex.Client.call_reducer(
+          Spacetimedbex.Phoenix,
+          "spawn_bonus",
+          %{"position" => position, "points" => @bonus_points}
+        )
+    end
   end
 
-  defp fetch_bonus do
-    case Spacetimedbex.Phoenix.get_all("bonus") do
-      [bonus | _] -> bonus
-      _ -> nil
-    end
+  defp fetch_bonuses do
+    Spacetimedbex.Phoenix.get_all("bonus")
+    |> Enum.map(fn b ->
+      %{id: b["id"], position: b["position"], points: b["points"]}
+    end)
   end
 
   defp fetch_players do
@@ -221,16 +225,21 @@ defmodule OutsiderGongWeb.GameLive do
           <p class="playing-as">Playing as <strong>{@player_name}</strong></p>
           <div class="click-zone">
             <button phx-click="click" class="click-btn">Click</button>
-            <%= if @bonus_visible do %>
+            <%!-- Live bonuses (not currently popping) --%>
+            <%= for bonus <- @bonuses, not Map.has_key?(@popping, bonus.id) do %>
               <button
                 phx-click="bonus_click"
-                class={"bonus-btn bonus-#{@bonus_position}" <> if(@bonus_popping, do: " bonus-pop", else: "")}
+                phx-value-id={bonus.id}
+                class={"bonus-btn bonus-#{bonus.position}"}
               >
-                +{@bonus_points}
+                +{bonus.points}
               </button>
-              <%= if @bonus_popping do %>
-                <div class={"bonus-ring bonus-#{@bonus_position}"}></div>
-              <% end %>
+            <% end %>
+            <%!-- Popping bonuses (animating into center button) --%>
+            <%= for {_id, bonus} <- @popping do %>
+              <div class={"bonus-btn bonus-#{bonus.position} bonus-genie"}>
+                +{bonus.points}
+              </div>
             <% end %>
           </div>
           <button phx-click="leave" class="leave-btn">Leave game</button>

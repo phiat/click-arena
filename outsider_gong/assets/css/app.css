@@ -409,47 +409,39 @@ body {
   100% { opacity: 1; transform: scale(1) rotate(0deg); }
 }
 
-/* Fizzle Pop: jiggle → pop → gone */
-@keyframes bonus-jiggle {
-  0%   { transform: translate(0, 0) rotate(0deg); }
-  10%  { transform: translate(-3px, 1px) rotate(-4deg); }
-  20%  { transform: translate(3px, -1px) rotate(4deg); }
-  30%  { transform: translate(-2px, -2px) rotate(-3deg); }
-  40%  { transform: translate(2px, 2px) rotate(3deg); }
-  50%  { transform: translate(-1px, 1px) rotate(-2deg); }
-  60%  { transform: translate(1px, -1px) rotate(2deg); }
-  70%  { transform: scale(1.3); opacity: 0.9; }
-  85%  { transform: scale(1.6); opacity: 0.4; }
-  100% { transform: scale(2.0); opacity: 0; }
-}
-
-.bonus-pop {
-  animation: bonus-jiggle 0.5s ease-out forwards !important;
+/* Genie: fizzle-jiggle then shrink + fly toward center button */
+.bonus-genie {
   pointer-events: none;
+  animation: bonus-fizzle 0.3s ease-in forwards,
+             bonus-suck 0.5s 0.3s ease-in forwards;
 }
 
-/* Expanding ring shockwave */
-@keyframes bonus-ring-expand {
-  0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0.8; border-width: 3px; }
-  50%  { opacity: 0.5; border-width: 2px; }
-  100% { transform: translate(-50%, -50%) scale(3); opacity: 0; border-width: 1px; }
+/* Phase 1: rapid jiggle/fizzle */
+@keyframes bonus-fizzle {
+  0%   { transform: translate(0, 0) rotate(0deg); filter: brightness(1); }
+  15%  { transform: translate(-3px, 1px) rotate(-5deg); filter: brightness(1.3); }
+  30%  { transform: translate(4px, -2px) rotate(5deg); filter: brightness(1.5); }
+  45%  { transform: translate(-2px, -2px) rotate(-4deg); filter: brightness(1.2); }
+  60%  { transform: translate(3px, 2px) rotate(3deg); filter: brightness(1.6); }
+  75%  { transform: translate(-1px, 1px) rotate(-2deg); filter: brightness(1.4); }
+  100% { transform: translate(0, 0) rotate(0deg) scale(0.9); filter: brightness(1.8); }
 }
 
-.bonus-ring {
-  position: absolute;
-  width: 52px;
-  height: 52px;
-  border-radius: 50%;
-  border: 3px solid #8fbf9a;
-  pointer-events: none;
-  z-index: 9;
-  animation: bonus-ring-expand 0.6s ease-out forwards;
+/* Phase 2: shrink and fly to center (0,0 of click-zone = where the main button is) */
+/* Each position class sets --genie-x and --genie-y for the flight vector */
+@keyframes bonus-suck {
+  0%   { opacity: 1; }
+  30%  { opacity: 0.9; transform: scale(0.6) translate(calc(var(--genie-x) * 0.3), calc(var(--genie-y) * 0.3)); }
+  70%  { opacity: 0.6; transform: scale(0.3) translate(calc(var(--genie-x) * 0.7), calc(var(--genie-y) * 0.7));
+         filter: brightness(2) drop-shadow(0 0 8px #8fbf9a); }
+  100% { opacity: 0; transform: scale(0) translate(var(--genie-x), var(--genie-y));
+         filter: brightness(3) drop-shadow(0 0 12px #8fbf9a); }
 }
 
-/* Ring inherits same position classes */
-.bonus-ring.bonus-top-left     { top: 16px;  left: -4px; }
-.bonus-ring.bonus-top-right    { top: 16px;  right: -4px; left: auto; }
-.bonus-ring.bonus-mid-left     { top: 80px;  left: -14px; }
-.bonus-ring.bonus-mid-right    { top: 80px;  right: -14px; left: auto; }
-.bonus-ring.bonus-low-left     { bottom: 16px; left: -4px; top: auto; }
-.bonus-ring.bonus-low-right    { bottom: 16px; right: -4px; left: auto; top: auto; }
+/* Flight vectors: from each slot position toward center button */
+.bonus-genie.bonus-top-left     { --genie-x: 56px;  --genie-y: 68px; }
+.bonus-genie.bonus-top-right    { --genie-x: -56px; --genie-y: 68px; }
+.bonus-genie.bonus-mid-left     { --genie-x: 66px;  --genie-y: 4px; }
+.bonus-genie.bonus-mid-right    { --genie-x: -66px; --genie-y: 4px; }
+.bonus-genie.bonus-low-left     { --genie-x: 56px;  --genie-y: -68px; }
+.bonus-genie.bonus-low-right    { --genie-x: -56px; --genie-y: -68px; }
