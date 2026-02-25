@@ -18,8 +18,8 @@ defmodule OutsiderGong.Application do
            [
              [
                pubsub: OutsiderGong.PubSub,
-               host: "localhost:3000",
-               database: "clickarena3",
+               host: System.get_env("SPACETIMEDB_HOST", "localhost:3000"),
+               database: System.get_env("SPACETIMEDB_DATABASE", "clickarena"),
                subscriptions: ["SELECT * FROM player"]
              ]
            ]}

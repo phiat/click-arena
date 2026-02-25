@@ -13,7 +13,7 @@ config :outsider_gong, OutsiderGongWeb.Endpoint,
   check_origin: false,
   code_reloader: true,
   debug_errors: true,
-  secret_key_base: "t1QS7TvnKwWc0DOZocURX8awp9ggD3Qa1pLRvRREeaeygRG9UU6AexjNKWMKhwMk",
+  secret_key_base: System.get_env("SECRET_KEY_BASE") || :crypto.strong_rand_bytes(64) |> Base.encode64(),
   watchers: [
     esbuild: {Esbuild, :install_and_run, [:outsider_gong, ~w(--sourcemap=inline --watch)]},
     tailwind: {Tailwind, :install_and_run, [:outsider_gong, ~w(--watch)]}

@@ -4,7 +4,7 @@ import Config
 # you can enable the server option below.
 config :outsider_gong, OutsiderGongWeb.Endpoint,
   http: [ip: {127, 0, 0, 1}, port: 4002],
-  secret_key_base: "qXZRaJ1v7YFJvOB7mm0zudmpi8rk8NcwKh06WM9WE9c6t6MonRU9tKjVnEFVC0/0",
+  secret_key_base: System.get_env("SECRET_KEY_BASE") || :crypto.strong_rand_bytes(64) |> Base.encode64(),
   server: false
 
 # Print only warnings and errors during test
