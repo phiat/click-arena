@@ -4,7 +4,7 @@
 
 A real-time multiplayer clicking game built with **Phoenix LiveView** and **SpacetimeDB**.
 
-Players join with a name, compete for clicks on a shared leaderboard, and hunt for bonus buttons that spawn around the main click target.
+Players join with a name, compete for clicks on a shared leaderboard, and race to claim bonus buttons that appear for all players simultaneously.
 
 ## Stack
 
@@ -26,16 +26,24 @@ Players join with a name, compete for clicks on a shared leaderboard, and hunt f
 ```bash
 cd click_arena_module
 cargo build --target wasm32-unknown-unknown --release
-spacetime publish clickarena3
+spacetime publish clickarena
 ```
 
 ### Phoenix server
 
 ```bash
-cd outsider_gong
+cd click_arena
 mix setup
 mix phx.server
 ```
+
+Configure via environment variables:
+
+| Variable | Default | Description |
+|---|---|---|
+| `SPACETIMEDB_HOST` | `localhost:3000` | SpacetimeDB host |
+| `SPACETIMEDB_DATABASE` | `clickarena5` | Database name from `spacetime publish` |
+| `SECRET_KEY_BASE` | auto-generated (dev) | Phoenix secret key (required in prod) |
 
 Visit [localhost:4000](http://localhost:4000).
 
@@ -43,7 +51,26 @@ Visit [localhost:4000](http://localhost:4000).
 
 1. Players join by entering a name — this calls the `join_game` reducer in SpacetimeDB
 2. Clicking the big button calls the `click` reducer, incrementing score by 1
-3. Every 50 clicks (50% chance), a bonus button spawns around the main button worth +10 points
-4. Timed bonus buttons also spawn randomly every 30-90 seconds
-5. The leaderboard updates in real-time via SpacetimeDB subscriptions piped through Phoenix PubSub
-6. Re-joining with the same name reclaims your leaderboard slot (no duplicates)
+3. Bonus buttons (+10 points) spawn as shared state in SpacetimeDB — all players see them simultaneously
+4. Up to 6 bonuses can be active at once, each in a different position around the click button
+5. First player to click a bonus claims it — it disappears for everyone with a genie animation (fizzle then fly into the main button)
+6. Bonuses spawn via click milestones (10% chance every 20 clicks) and a random timer (every 30-90 seconds)
+7. The leaderboard updates in real-time via SpacetimeDB subscriptions piped through Phoenix PubSub
+8. Re-joining with the same name reclaims your leaderboard slot (no duplicates)
+
+## Architecture
+
+```
+Browser ←WebSocket→ Phoenix LiveView ←WebSocket→ SpacetimeDB
+                         ↕
+                    Phoenix PubSub
+                    (player + bonus table subscriptions)
+```
+
+**SpacetimeDB tables**: `Player` (session_id, name, score) and `Bonus` (id, position, points)
+
+**Reducers**: `join_game`, `click`, `spawn_bonus`, `claim_bonus`, `leave_game`
+
+## License
+
+MIT

@@ -2,10 +2,10 @@
 click_arena_module/target/
 
 # Phoenix/Elixir
-outsider_gong/_build/
-outsider_gong/deps/
-outsider_gong/priv/static/assets/
-outsider_gong/.elixir_ls/
+click_arena/_build/
+click_arena/deps/
+click_arena/priv/static/assets/
+click_arena/.elixir_ls/
 
 # Beads internals (keep config)
 .beads/dolt/
