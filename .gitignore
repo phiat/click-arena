@@ -1,0 +1,12 @@
+# Rust build artifacts
+click_arena_module/target/
+
+# Phoenix/Elixir
+outsider_gong/_build/
+outsider_gong/deps/
+outsider_gong/priv/static/assets/
+outsider_gong/.elixir_ls/
+
+# Beads internals (keep config)
+.beads/dolt/
+.beads/interactions.jsonl
