@@ -1,5 +1,10 @@
 # Click Arena
 
+![Elixir](https://img.shields.io/badge/Elixir-4B275F?logo=elixir&logoColor=white)
+![Phoenix](https://img.shields.io/badge/Phoenix-FD4F00?logo=phoenixframework&logoColor=white)
+![SpacetimeDB](https://img.shields.io/badge/SpacetimeDB-00C389?logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
+
 ![Click Arena](click-arena.png)
 
 A real-time multiplayer clicking game built with **Phoenix LiveView** and **SpacetimeDB**.
