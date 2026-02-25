@@ -1,6 +1,6 @@
 # OutsiderGong
 
-![Click Arena](../click-arena.png)
+![Click Arena](click-arena.png)
 
 To start your Phoenix server:
 
