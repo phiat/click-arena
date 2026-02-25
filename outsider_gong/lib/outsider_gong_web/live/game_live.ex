@@ -3,7 +3,8 @@ defmodule OutsiderGongWeb.GameLive do
 
   require Logger
 
-  @topic "spacetimedb:player"
+  @player_topic "spacetimedb:player"
+  @bonus_topic "spacetimedb:bonus"
   @refresh_delay_ms 100
   @bonus_points 10
   # 6 positions around the main button: {side, vertical}
@@ -11,12 +12,14 @@ defmodule OutsiderGongWeb.GameLive do
 
   def mount(_params, _session, socket) do
     if connected?(socket) do
-      Phoenix.PubSub.subscribe(OutsiderGong.PubSub, @topic)
+      Phoenix.PubSub.subscribe(OutsiderGong.PubSub, @player_topic)
+      Phoenix.PubSub.subscribe(OutsiderGong.PubSub, @bonus_topic)
       :timer.send_interval(500, self(), :tick)
       schedule_bonus_check()
     end
 
     session_id = :crypto.strong_rand_bytes(16) |> Base.encode16(case: :lower)
+    bonus = fetch_bonus()
 
     socket =
       socket
@@ -25,8 +28,9 @@ defmodule OutsiderGongWeb.GameLive do
       |> assign(:joined, false)
       |> assign(:players, fetch_players())
       |> assign(:tick, 0)
-      |> assign(:bonus_visible, false)
-      |> assign(:bonus_position, "top-left")
+      |> assign(:bonus_visible, bonus != nil)
+      |> assign(:bonus_position, if(bonus, do: bonus["position"], else: "top-left"))
+      |> assign(:bonus_id, if(bonus, do: bonus["id"], else: nil))
       |> assign(:bonus_popping, false)
       |> assign(:bonus_points, @bonus_points)
       |> assign(:click_count, 0)
@@ -62,12 +66,9 @@ defmodule OutsiderGongWeb.GameLive do
     socket = assign(socket, click_count: click_count)
 
     # Check if we should spawn bonus on score milestones (every 50 clicks, 50% chance)
-    socket =
-      if rem(click_count, 50) == 0 and :rand.uniform() < 0.5 and not socket.assigns.bonus_visible do
-        spawn_bonus(socket)
-      else
-        socket
-      end
+    if rem(click_count, 50) == 0 and :rand.uniform() < 0.5 and not socket.assigns.bonus_visible do
+      call_spawn_bonus()
+    end
 
     schedule_refresh()
     {:noreply, socket}
@@ -77,8 +78,8 @@ defmodule OutsiderGongWeb.GameLive do
     if socket.assigns.bonus_visible and not socket.assigns.bonus_popping do
       Spacetimedbex.Client.call_reducer(
         Spacetimedbex.Phoenix,
-        "bonus_click",
-        %{"session_id" => socket.assigns.session_id, "points" => @bonus_points}
+        "claim_bonus",
+        %{"session_id" => socket.assigns.session_id, "bonus_id" => socket.assigns.bonus_id}
       )
 
       # Start pop animation, then hide after animation completes
@@ -114,27 +115,46 @@ defmodule OutsiderGongWeb.GameLive do
   def handle_info(:maybe_spawn_bonus, socket) do
     schedule_bonus_check()
 
-    socket =
-      if socket.assigns.joined and not socket.assigns.bonus_visible do
-        # ~50% chance each check (checks every 30-90s)
-        if :rand.uniform() < 0.5 do
-          spawn_bonus(socket)
-        else
-          socket
-        end
-      else
-        socket
+    if socket.assigns.joined and not socket.assigns.bonus_visible do
+      # ~50% chance each check (checks every 30-90s)
+      if :rand.uniform() < 0.5 do
+        call_spawn_bonus()
       end
+    end
 
     {:noreply, socket}
   end
 
   def handle_info(:bonus_animation_done, socket) do
-    {:noreply, assign(socket, bonus_visible: false, bonus_popping: false)}
+    {:noreply, assign(socket, bonus_popping: false)}
   end
 
   def handle_info({:spacetimedb, _action, "player", _row}, socket) do
     {:noreply, assign(socket, players: fetch_players())}
+  end
+
+  def handle_info({:spacetimedb, _action, "bonus", _row}, socket) do
+    bonus = fetch_bonus()
+
+    socket =
+      if bonus do
+        assign(socket,
+          bonus_visible: true,
+          bonus_position: bonus["position"],
+          bonus_id: bonus["id"],
+          bonus_popping: false
+        )
+      else
+        # Bonus was claimed/deleted — only hide if not mid-animation
+        if socket.assigns.bonus_popping do
+          # Let animation finish, it will clear via :bonus_animation_done
+          socket
+        else
+          assign(socket, bonus_visible: false, bonus_id: nil)
+        end
+      end
+
+    {:noreply, socket}
   end
 
   def handle_info(_msg, socket), do: {:noreply, socket}
@@ -151,9 +171,21 @@ defmodule OutsiderGongWeb.GameLive do
     Process.send_after(self(), :maybe_spawn_bonus, delay)
   end
 
-  defp spawn_bonus(socket) do
+  defp call_spawn_bonus do
     position = Enum.random(@bonus_positions)
-    assign(socket, bonus_visible: true, bonus_position: position, bonus_popping: false)
+
+    Spacetimedbex.Client.call_reducer(
+      Spacetimedbex.Phoenix,
+      "spawn_bonus",
+      %{"position" => position, "points" => @bonus_points}
+    )
+  end
+
+  defp fetch_bonus do
+    case Spacetimedbex.Phoenix.get_all("bonus") do
+      [bonus | _] -> bonus
+      _ -> nil
+    end
   end
 
   defp fetch_players do

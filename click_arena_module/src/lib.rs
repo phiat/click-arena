@@ -9,6 +9,16 @@ pub struct Player {
     joined_at: Timestamp,
 }
 
+#[table(accessor = bonus, public)]
+pub struct Bonus {
+    #[primary_key]
+    #[auto_inc]
+    id: u64,
+    position: String,
+    points: u64,
+    created_at: Timestamp,
+}
+
 #[reducer]
 pub fn join_game(ctx: &ReducerContext, session_id: String, name: String) {
     // Remove any existing entry for this session_id
@@ -39,12 +49,31 @@ pub fn click(ctx: &ReducerContext, session_id: String) {
 }
 
 #[reducer]
-pub fn bonus_click(ctx: &ReducerContext, session_id: String, points: u64) {
-    if let Some(mut p) = ctx.db.player().session_id().find(&session_id) {
-        let new_score = p.score + points;
-        ctx.db.player().session_id().delete(p.session_id.clone());
-        p.score = new_score;
-        ctx.db.player().insert(p);
+pub fn spawn_bonus(ctx: &ReducerContext, position: String, points: u64) {
+    // Delete any existing bonus rows
+    let existing: Vec<_> = ctx.db.bonus().iter().collect();
+    for b in existing {
+        ctx.db.bonus().id().delete(b.id);
+    }
+    ctx.db.bonus().insert(Bonus {
+        id: 0, // auto_inc
+        position,
+        points,
+        created_at: ctx.timestamp,
+    });
+}
+
+#[reducer]
+pub fn claim_bonus(ctx: &ReducerContext, session_id: String, bonus_id: u64) {
+    if let Some(b) = ctx.db.bonus().id().find(bonus_id) {
+        let points = b.points;
+        ctx.db.bonus().id().delete(bonus_id);
+        if let Some(mut p) = ctx.db.player().session_id().find(&session_id) {
+            let new_score = p.score + points;
+            ctx.db.player().session_id().delete(p.session_id.clone());
+            p.score = new_score;
+            ctx.db.player().insert(p);
+        }
     }
 }
 

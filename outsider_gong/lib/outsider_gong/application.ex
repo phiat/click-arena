@@ -19,8 +19,8 @@ defmodule OutsiderGong.Application do
              [
                pubsub: OutsiderGong.PubSub,
                host: System.get_env("SPACETIMEDB_HOST", "localhost:3000"),
-               database: System.get_env("SPACETIMEDB_DATABASE", "clickarena"),
-               subscriptions: ["SELECT * FROM player"]
+               database: System.get_env("SPACETIMEDB_DATABASE", "clickarena5"),
+               subscriptions: ["SELECT * FROM player", "SELECT * FROM bonus"]
              ]
            ]}
       },
