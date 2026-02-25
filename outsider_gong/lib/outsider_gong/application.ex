@@ -19,7 +19,7 @@ defmodule OutsiderGong.Application do
              [
                pubsub: OutsiderGong.PubSub,
                host: "localhost:3000",
-               database: "clickarena",
+               database: "clickarena3",
                subscriptions: ["SELECT * FROM player"]
              ]
            ]}
